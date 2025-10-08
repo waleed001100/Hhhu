@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ar">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>System Alert</title>
+<style>
+  :root{--bg:#0b0b0f;--accent:#ff5252;--muted:#cfcfd6}
+  html,body{height:100%;margin:0;font-family:Inter, "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;background:var(--bg);color:var(--muted);-webkit-font-smoothing:antialiased}
+  .wrap{height:100%;display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}
+  .panel{width:100%;max-width:1100px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;padding:28px;box-shadow:0 10px 40px rgba(0,0,0,0.6);position:relative;overflow:hidden}
+  .header{display:flex;align-items:center;gap:16px}
+  .logo{width:56px;height:56px;border-radius:8px;background:linear-gradient(135deg,#222,#111);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted)}
+  .title{font-size:20px;font-weight:700;color:#fff}
+  .subtitle{font-size:13px;color:#9b9ba6}
+  .main{display:flex;gap:24px;margin-top:20px}
+  .left{flex:1;min-width:320px}
+  .right{width:320px}
+  .terminal{background:#05050a;padding:18px;border-radius:8px;color:#b9f2ff;font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;height:320px;overflow:hidden;position:relative}
+  .log{white-space:pre-wrap;line-height:1.4;font-size:13px;max-height:100%;overflow:auto}
+  .progressWrap{margin-top:14px}
+  .bar{height:14px;background:#111;border-radius:8px;overflow:hidden}
+  .bar > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,var(--accent),#ff8a65)}
+  .meta{margin-top:10px;font-size:13px;color:#9b9ba6;display:flex;justify-content:space-between}
+  .danger{color:var(--accent);font-weight:700}
+  .revealCard{display:none;position:absolute;inset:20px;background:#fff;color:#111;border-radius:10px;padding:28px;box-shadow:0 10px 40px rgba(0,0,0,0.5);align-items:center;justify-content:center;text-align:center}
+  .revealCard h1{margin:0 0 12px;font-size:28px}
+  .btn{display:inline-block;padding:10px 14px;border-radius:8px;background:#111;color:#fff;text-decoration:none;cursor:pointer;border:none}
+  .controls{display:flex;gap:10px;align-items:center;margin-top:14px}
+  .small{font-size:12px;color:#9b9ba6}
+  /* fullscreen feel */
+  .fullscreen{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;z-index:9999}
+  @media (max-width:800px){.panel{padding:18px}.terminal{height:220px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel" role="dialog" aria-labelledby="title">
+    <div class="header">
+      <div class="logo">SYS</div>
+      <div>
+        <div id="title" class="title">Security Alert — Intrusion Detected</div>
+        <div class="subtitle" id="sub">Kernel integrity compromised · attempt to isolate</div>
+      </div>
+    </div>
+
+    <div class="main">
+      <div class="left">
+        <div class="terminal" id="terminal">
+          <div class="log" id="log"></div>
+        </div>
+
+        <div class="progressWrap">
+          <div class="bar"><i id="barFill"></i></div>
+          <div class="meta"><span id="statusText">Initializing scan...</span><span id="percentText">0%</span></div>
+        </div>
+
+        <div class="controls">
+          <button class="btn" id="revealBtn">كشف الحقيقة الآن</button>
+          <div class="small">الصفحة تكشف نفسها بعد <span id="countdown">7</span> ثواني</div>
+        </div>
+      </div>
+
+      <div class="right">
+        <div style="background:#071226;padding:14px;border-radius:8px">
+          <div style="font-size:13px;color:#9b9ba6">الجهاز</div>
+          <div style="font-weight:700;font-size:18px;margin-top:6px;color:#fff" id="device">Windows • Device-01</div>
+          <div style="margin-top:8px;font-size:13px;color:#9b9ba6">الموقع التقريبي</div>
+          <div style="font-weight:600;margin-top:6px" id="ip">198.51.100.23</div>
+        </div>
+
+        <div style="margin-top:14px;background:#071226;padding:12px;border-radius:8px">
+          <div class="small">النتيجة</div>
+          <div style="margin-top:8px;font-size:14px" id="result">تفاصيل الحساسية عالية — تتطلب تدخل</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="revealCard" id="revealCard" aria-hidden="true">
+      <h1 —    تم اختراق الجهاز بالكامل</h1>
+      <p style="margin:0 0 18px"> —  تم اختراق الجهاز بالكامل.</p>
+      <button class="btn" id="closeReveal">حسناً</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* --------------- CONFIGURE (يمكنك تعديل هذه القيم لتخصيص المقلب) --------------- */
+const CONFIG = {
+  totalSteps: 100,
+  revealAfterSeconds: 7,   // بعد كام ثانية تظهر الحقيقة
+  fakeIpList: ["198.51.100.23","203.0.113.45","192.0.2.101"],
+  deviceNames: ["Windows • Device-01","MacBook • user-mac","Laptop • Ahmed-PC"]
+};
+/* ------------------------------------------------------------------------------ */
+
+const logEl = document.getElementById('log');
+const bar = document.getElementById('barFill');
+const percentText = document.getElementById('percentText');
+const statusText = document.getElementById('statusText');
+const ipEl = document.getElementById('ip');
+const devEl = document.getElementById('device');
+const revealCard = document.getElementById('revealCard');
+const revealBtn = document.getElementById('revealBtn');
+const countdownEl = document.getElementById('countdown');
+const closeReveal = document.getElementById('closeReveal');
+
+let step = 0;
+let countdown = CONFIG.revealAfterSeconds;
+ipEl.textContent = CONFIG.fakeIpList[Math.floor(Math.random()*CONFIG.fakeIpList.length)];
+devEl.textContent = CONFIG.deviceNames[Math.floor(Math.random()*CONFIG.deviceNames.length)];
+
+// fake log lines to print
+const LINES = [
+  ">> kernel: unauthorized module loaded",
+  ">> net: suspicious outbound traffic detected",
+  ">> disk: encrypted container found (analyzing...)",
+  ">> creds: attempting harvest (blocked)",
+  ">> quarantine: isolating process 0x7a3b",
+  ">> decryptor: partial key found (decrypting)",
+  ">> memory: scanning for injection signatures",
+  ">> fs: locating sensitive files (documents, wallets, images)",
+  ">> network: multiple C2 endpoints discovered",
+  ">> system: escalating privileges..."
+];
+
+function appendLine(t){
+  logEl.textContent += t + "\\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// progress simulation
+function stepOnce(){
+  step++;
+  const pct = Math.round((step/CONFIG.totalSteps)*100);
+  bar.style.width = pct + '%';
+  percentText.textContent = pct + '%';
+  if (step % 7 === 0) {
+    appendLine(LINES[Math.floor(Math.random()*LINES.length)]);
+  } else if (step % 13 === 0) {
+    appendLine(">> module: signature update failed, retrying...");
+  } else {
+    appendLine(">> scanning sector " + (1000+step) + "...");
+  }
+
+  if (step < CONFIG.totalSteps) {
+    statusText.textContent = (pct < 50) ? "جارٍ المسح..." : (pct < 90) ? "محاولة احتواء التهديد..." : "التهيئة لعملية الإبلاغ...";
+  } else {
+    statusText.textContent = "انتهاء الفحص — إعداد التقرير";
+  }
+}
+
+// run simulation with interval
+const interval = setInterval(() => {
+  stepOnce();
+  if (step >= CONFIG.totalSteps) clearInterval(interval);
+}, 70);
+
+// countdown to reveal
+const cdInterval = setInterval(() => {
+  countdown--;
+  countdownEl.textContent = Math.max(0, countdown);
+  if (countdown <= 0) {
+    clearInterval(cdInterval);
+    showReveal();
+  }
+}, 1000);
+
+// reveal function (safe — فقط تظهر رسالة)
+function showReveal(){
+  revealCard.style.display = 'flex';
+  revealCard.setAttribute('aria-hidden','false');
+}
+
+// buttons
+revealBtn.addEventListener('click', showReveal);
+closeReveal.addEventListener('click', () => {
+  revealCard.style.display = 'none';
+  revealCard.setAttribute('aria-hidden','true');
+  // optionally reload to allow replay
+  // location.reload();
+});
+
+/* Accessibility: allow ESC to reveal */
+document.addEventListener('keydown', (e) => {
+  if (e.key === "Escape") showReveal();
+});
+</script>
+</body>
+</html>
